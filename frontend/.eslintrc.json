@@ -1,0 +1,7 @@
+{
+  "extends": [
+    "../.eslintrc.base.json",
+    "next/core-web-vitals",
+    "next/typescript"
+  ]
+}

@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+/* ── Light tokens ─────────────────────────────────────────── */
+:root {
+  --color-bg: #F7F8FA;
+  --color-surface: #FFFFFF;
+  --color-border: #E1E4EA;
+  --color-primary: #E05A33;
+  --color-primary-hover: #C94E2B;
+  --color-text1: #1B1F27;
+  --color-text2: #6C7281;
+  --color-success: #1A7F3F;
+  --color-warning: #C47A09;
+  --color-danger: #C93B3B;
+}
+
+/* ── Dark tokens ──────────────────────────────────────────── */
+.dark {
+  --color-bg: #111318;
+  --color-surface: #1A1D24;
+  --color-border: #2D3140;
+  --color-primary: #E8674A;
+  --color-primary-hover: #F07B60;
+  --color-text1: #E8EAF0;
+  --color-text2: #8B90A0;
+  --color-success: #34C265;
+  --color-warning: #E09830;
+  --color-danger: #E05252;
+}
+
+body {
+  @apply bg-bg text-text1 font-sans antialiased;
+}
+
+/* ── Focus ring (keyboard only) ───────────────────────────── */
+*:focus-visible {
+  @apply outline-2 outline-offset-2 outline-primary;
+}
+
+/* ── Scrollbar (webkit) ───────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-text2);
+}
