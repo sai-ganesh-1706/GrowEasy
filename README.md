@@ -10,6 +10,22 @@ A CSV-to-CRM import tool that takes an arbitrary CSV file, sends rows through an
 
 ---
 
+## Screenshots
+
+### CSV Upload and Preview
+
+![CSV Upload and Preview](screenshots/a.jpeg)
+
+### AI Processing
+
+![AI Processing](screenshots/b.jpeg)
+
+### CRM Extraction Results
+
+![CRM Extraction Results](screenshots/c.jpeg)
+
+---
+
 ## Architecture
 
 ```mermaid
