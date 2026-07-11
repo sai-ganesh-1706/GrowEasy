@@ -2,30 +2,81 @@
 
 A CSV-to-CRM import tool that takes an arbitrary CSV file, sends rows through an LLM (Groq/Llama 3.3 70B) to extract structured CRM records, and shows results with skip reasons. Built as a monorepo with a Next.js frontend and Express backend.
 
+![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)
+![npm](https://img.shields.io/badge/npm-%E2%89%A59-CB3837?logo=npm&logoColor=white)
+![Next.js](https://img.shields.io/badge/frontend-Next.js-000000?logo=next.js&logoColor=white)
+![Express](https://img.shields.io/badge/backend-Express-000000?logo=express&logoColor=white)
+![LLM](https://img.shields.io/badge/LLM-Groq%20%2F%20Llama%203.3%2070B-orange)
+
 ---
 
 ## Architecture
 
-```
-┌────────────────────┐         ┌───────────────────────────────────┐
-│   Next.js (3000)   │  HTTP   │       Express API (3001)          │
-│                    │────────▶│                                   │
-│  Upload ─▶ Preview │         │  POST /api/csv/upload             │
-│  ─▶ Processing     │         │    ├─ multer (5 MB, .csv only)    │
-│  ─▶ Results        │         │    ├─ papaparse → parse CSV       │
-│                    │         │    └─ store in memory session      │
-│                    │         │                                   │
-│                    │         │  POST /api/csv/extract             │
-│                    │         │    ├─ split rows into batches      │
-│                    │         │    ├─ send each batch to LLM       │
-│                    │         │    ├─ validate response with Zod   │
-│                    │         │    └─ aggregate parsed + skipped   │
-└────────────────────┘         └───────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Client["Next.js — Port 3000"]
+        A[Upload] --> B[Preview]
+        B --> C[Processing]
+        C --> D[Results]
+    end
+
+    subgraph Server["Express API — Port 3001"]
+        subgraph Upload["POST /api/csv/upload"]
+            E["multer<br/>5MB, .csv only"] --> F["papaparse<br/>parse CSV"]
+            F --> G["store in<br/>memory session"]
+        end
+
+        subgraph Extract["POST /api/csv/extract"]
+            H["split rows<br/>into batches"] --> I["send batches to LLM<br/>3 concurrent"]
+            I --> J["validate with Zod"]
+            J --> K["aggregate<br/>parsed + skipped"]
+        end
+    end
+
+    B -.->|HTTP| Upload
+    C -.->|HTTP| Extract
+    I -.->|"fail? retry ×2<br/>(exp. backoff)"| I
+
+    style Client fill:#e8f0fe,stroke:#4285f4
+    style Server fill:#fef7e0,stroke:#f9ab00
+    style Upload fill:#fff,stroke:#f9ab00
+    style Extract fill:#fff,stroke:#f9ab00
 ```
 
 **Why two steps?** Upload does no AI work — it parses the CSV, stores rows in a server-side session, and returns a preview. The user reviews the preview before triggering extraction, which is the expensive LLM call. This avoids wasting API credits on files the user didn't intend to process.
 
 **Why batching?** LLMs have context window limits and get less reliable with very large payloads. The extraction service splits rows into batches (configurable via `MAX_BATCH_SIZE`, default 25), processes them concurrently (3 at a time), and aggregates results. If a batch fails, it retries up to 2 times with exponential backoff before marking those rows as skipped — so one rate-limit error doesn't kill a 500-row import.
+
+### Extraction retry flow
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant API as Express API
+    participant LLM as Groq LLM
+
+    FE->>API: POST /api/csv/extract { uploadId }
+    API->>API: split rows into batches
+    par 3 batches concurrently
+        API->>LLM: batch 1
+        API->>LLM: batch 2
+        API->>LLM: batch 3
+    end
+    LLM-->>API: response (or error)
+    alt invalid JSON / Zod fails
+        API->>LLM: retry with parse error + original rows
+        LLM-->>API: corrected response
+    else 429 / transient failure
+        API->>API: wait (1s, then 2s)
+        API->>LLM: retry batch
+    end
+    alt 3 attempts exhausted
+        API->>API: mark batch rows as skipped
+    else success
+        API->>API: aggregate parsed rows
+    end
+    API-->>FE: { parsed, skipped, totalImported, totalSkipped }
+```
 
 ---
 
@@ -204,10 +255,12 @@ Each batch gets up to 3 attempts (1 initial + 2 retries) with exponential backof
 
 ### Tradeoffs
 
-- **In-memory session store** — CSV data is stored in a `Map` keyed by `uploadId`. This is fine for a single-process dev setup but won't survive a server restart or work with multiple replicas. A production version would use Redis or a database.
-- **No streaming/SSE for progress** — the frontend shows staged messages during extraction rather than real progress from the backend. Real batch-by-batch progress would require SSE or WebSocket, which was deprioritized.
-- **No auth** — there's no user authentication. The tool assumes a trusted internal environment.
-- **Groq-only** — the LLM provider is abstracted behind an `ILlmProvider` interface, so adding OpenAI or Anthropic is straightforward, but only Groq is implemented.
+| Decision | Rationale | Cost |
+|---|---|---|
+| In-memory session store (`Map` keyed by `uploadId`) | Simple, zero infra for dev | Won't survive restart or scale to multiple replicas |
+| No streaming/SSE for progress | Deprioritized for MVP | Frontend shows staged messages instead of real batch progress |
+| No auth | Assumes trusted internal environment | Not safe for public deployment as-is |
+| Groq-only LLM provider | Fastest path to a working demo | `ILlmProvider` interface exists but only Groq is implemented |
 
 ---
 
